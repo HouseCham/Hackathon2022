@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using Hackathon2022.Models;
+using Hackathon2022.Validations;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Data.SqlClient;
@@ -22,6 +23,13 @@ namespace Hackathon2022.Controllers
         {
             try
             {
+                /* ========== Validacion de Cuerpo ========== */
+                DoctorValidation validator = new DoctorValidation();
+                if (!validator.Validate(doctor).IsValid)
+                {
+                    return BadRequest($"Error en {validator.Validate(doctor).Errors.FirstOrDefault().ErrorMessage}");
+                }
+
                 using SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("DBConnectionString"));
                 doctor.Token = GenerateRandomToken(50);
                 await connection.ExecuteAsync("EXECUTE insertNewDoctor @Name, @Surname, @Token", doctor);
