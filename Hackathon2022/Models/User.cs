@@ -7,7 +7,7 @@
         public string Surname { get; set; }
         public string Gender { get; set; }
         public string Race { get; set; }
-        public DateTime DOB { get; set; }
+        public string DOB { get; set; }
         public int SSN { get; set; }
         public string Country { get; set; }
         public string PhoneNumber { get; set; }
