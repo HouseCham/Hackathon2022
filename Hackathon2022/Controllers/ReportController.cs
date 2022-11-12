@@ -26,7 +26,7 @@ namespace Hackathon2022.Controllers
                 int userId = 0;
                 int PharmaId = 0;
 
-                //using SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("DBConnectionString"));
+                /* Crear Reporte */
                 using (SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("DBConnectionString")))
                 {
                     connection.Open();
@@ -38,6 +38,8 @@ namespace Hackathon2022.Controllers
                         {
                             return BadRequest("Token Doctor no valido");
                         }
+                        reader.Close();
+                        command.Dispose();
                     }
                     using (SqlCommand command = connection.CreateCommand())
                     {
@@ -45,19 +47,10 @@ namespace Hackathon2022.Controllers
                         SqlDataReader reader = await command.ExecuteReaderAsync();
                         if (!reader.HasRows)
                         {
-                            await InsertNewUser(reportDTO.user);
-                        }
-                    }
-                    using (SqlCommand command = connection.CreateCommand())
-                    {
-                        command.CommandText = $"EXECUTE checkIfUserExists {reportDTO.user.SSN}";
-                        SqlDataReader reader = await command.ExecuteReaderAsync();
-                        if (!reader.HasRows)
-                        {
-                            await InsertNewUser(reportDTO.user);
+                            await connection.ExecuteAsync("EXECUTE insertNewUser @Name, @Surname, @Gender, @Race, @DOB, @SSN, @Country, @PhoneNumber, @Address, @Email", reportDTO.user);
                             using (SqlCommand command2 = connection.CreateCommand())
                             {
-                                command.CommandText = "SELECT IDENT_CURRENT('Users')";
+                                command2.CommandText = "SELECT IDENT_CURRENT('Users')";
                                 SqlDataReader reader2 = await command2.ExecuteReaderAsync();
                                 if (!reader.HasRows)
                                 {
@@ -66,6 +59,7 @@ namespace Hackathon2022.Controllers
                                         userId = reader.GetInt32(0);
                                     }
                                 }
+                                command2.Dispose();
                             }
                         }
                         else
@@ -75,6 +69,8 @@ namespace Hackathon2022.Controllers
                                 userId = reader.GetInt32(0);
                             }
                         }
+                        reader.Close();
+                        command.Dispose();
                     }
                     using (SqlCommand command = connection.CreateCommand())
                     {
@@ -82,10 +78,11 @@ namespace Hackathon2022.Controllers
                         SqlDataReader reader = await command.ExecuteReaderAsync();
                         if (!reader.HasRows)
                         {
-                            await InsertNewPharmaceutic(reportDTO.PharmaceuticName);
+                            reader.Close();
+                            await connection.ExecuteAsync("EXECUTE insertNewPharmaceutic @PharmaName", new { PharmaName = reportDTO.PharmaceuticName });
                             using (SqlCommand command2 = connection.CreateCommand())
                             {
-                                command.CommandText = "SELECT IDENT_CURRENT('Pharmaceutics')";
+                                command2.CommandText = "SELECT IDENT_CURRENT('Pharmaceutics')";
                                 SqlDataReader reader2 = await command2.ExecuteReaderAsync();
                                 if (!reader.HasRows)
                                 {
@@ -102,43 +99,124 @@ namespace Hackathon2022.Controllers
                             {
                                 PharmaId = reader.GetInt32(0);
                             }
+                            reader.Close();
                         }
+                        command.Dispose();
                     }
                     using (SqlCommand command = connection.CreateCommand())
                     {
                         command.CommandText = $"EXECUTE insertNewReport {userId}, {PharmaId}";
                         await command.ExecuteReaderAsync();
+                        command.Dispose();
                     }
                     connection.Close();
                     connection.Dispose();
                 }
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
+                
+                /* Insertar sintomas del reporte */
+                using (SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("DBConnectionString")))
+                {
+                    connection.Open();
+                    using (SqlCommand command = connection.CreateCommand())
+                    {
+                        int symptonId = 0;
+                        foreach(var sympton in reportDTO.SymptonsReported)
+                        {
+                            command.CommandText = $"EXECUTE checkIfSymptonExists {sympton.SymptonName}";
+                            var reader = await command.ExecuteReaderAsync();
+                            if (reader.HasRows)
+                            {
+                                while (reader.Read())
+                                {
+                                    symptonId = reader.GetInt32(0);
+                                }
+                                reader.Close();
+                            }
+                            else
+                            {
+                                reader.Close();
+                                using (SqlCommand command2 = connection.CreateCommand())
+                                {
+                                    command2.CommandText = $"EXECUTE insertNewSympton {sympton.SymptonName}";
+                                    var reader2 = await command2.ExecuteReaderAsync();
+                                    reader2.Close();
+                                    using (SqlCommand command3 = connection.CreateCommand())
+                                    {
+                                        command3.CommandText = "SELECT IDENT_CURRENT('Symptons')";
+                                        var reader3 = await command2.ExecuteReaderAsync();
+                                        if (reader3.HasRows)
+                                        {
+                                            while (reader3.Read())
+                                            {
+                                                symptonId = reader3.GetInt32(0);
+                                            }
+                                        }
+                                        reader3.Close();
+                                    }
+                                }
+                            }
+                            command.CommandText = $"EXECUTE insertNewSymptonReported {symptonId}";
+                            var reader4 = await command.ExecuteReaderAsync();
+                            reader4.Close();
+                            command.Dispose();
+                        }
+                    }
+                    connection.Close();
+                    connection.Dispose();
+                }
 
-        public async Task<IActionResult> InsertNewUser(User user)
-        {
-            try
-            {
-                using SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("DBConnectionString"));
-                await connection.ExecuteAsync("EXECUTE insertNewUser @Name, @Surname, @Gender, @Race, @DOB, @SSN, @Country, @PhoneNumber, @Address, @Email", user);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
-        public async Task<IActionResult> InsertNewPharmaceutic(string pharmaName)
-        {
-            try
-            {
-                using SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("DBConnectionString"));
-                await connection.ExecuteAsync("EXECUTE insertNewPharmaceutic @PharmaName", new {PharmaName = pharmaName});
+                /* Insertar drugs del reporte */
+                using (SqlConnection connection = new SqlConnection(_configuration.GetConnectionString("DBConnectionString")))
+                {
+                    connection.Open();
+                    using (SqlCommand command = connection.CreateCommand())
+                    {
+                        int drugId = 0;
+                        foreach (var drug in reportDTO.DrugsReported)
+                        {
+                            command.CommandText = $"EXECUTE checkIfDrugExists {drug.Drugname}";
+                            var reader = await command.ExecuteReaderAsync();
+                            if (reader.HasRows)
+                            {
+                                while (reader.Read())
+                                {
+                                    drugId = reader.GetInt32(0);
+                                }
+                                reader.Close();
+                            }
+                            else
+                            {
+                                reader.Close();
+                                using (SqlCommand command2 = connection.CreateCommand())
+                                {
+                                    command2.CommandText = $"EXECUTE insertNewDrug {drug.Drugname}";
+                                    var reader2 = await command2.ExecuteReaderAsync();
+                                    reader2.Close();
+                                    using (SqlCommand command3 = connection.CreateCommand())
+                                    {
+                                        command3.CommandText = "SELECT IDENT_CURRENT('Drugs')";
+                                        var reader3 = await command3.ExecuteReaderAsync();
+                                        if (reader3.HasRows)
+                                        {
+                                            while (reader3.Read())
+                                            {
+                                                drugId = reader3.GetInt32(0);
+                                            }
+                                        }
+                                        reader3.Close();
+                                    }
+                                }
+                            }
+
+                            command.CommandText = $"EXECUTE insertNewDrugReported {drugId}";
+                            var reader4 = await command.ExecuteReaderAsync();
+                            reader4.Close();
+                            command.Dispose();
+                        }
+                    }
+                    connection.Close();
+                    connection.Dispose();
+                }
                 return Ok();
             }
             catch (Exception ex)
